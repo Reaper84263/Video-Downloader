@@ -25,7 +25,9 @@ Build Command: npm run setup
 Start Command: npm start
 ```
 
-`npm run setup` installs `yt-dlp` into the Render build for extractor-supported links. Direct `.mp4`, `.webm`, `.mov`, and `.m4v` links can work without it, but social/streaming pages need the setup step. You can set `YTDLP_CONCURRENT_FRAGMENTS` to tune download concurrency; the default is `8`.
+Keep the service on **one instance**. Download progress and finished files are stored on that running server while the browser polls `/api/jobs/:id`; multiple instances can send a later poll to a different server that does not have the same job. The app also saves job metadata in the temp directory so completed jobs can be recovered if in-memory state is lost on the same instance.
+
+`npm run setup` installs `yt-dlp` into the Render build for extractor-supported links. Direct `.mp4`, `.webm`, `.mov`, and `.m4v` links can work without it, but social/streaming pages need the setup step. You can set `YTDLP_CONCURRENT_FRAGMENTS` to tune download concurrency; the default is `8`. You can set `DOWNLOAD_JOB_DIR` if you want job files under a specific writable directory instead of the OS temp folder.
 
 ## Optional extractor support
 

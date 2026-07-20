@@ -3,9 +3,9 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
-import { access, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, join, normalize, relative, resolve } from "node:path";
+import { basename, extname, join, normalize, relative, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -19,6 +19,8 @@ const ytdlpTimeoutMs = 45_000;
 const downloadTimeoutMs = 30 * 60_000;
 const jobRetentionMs = 60 * 60_000;
 const maxActiveJobs = 3;
+const jobStateFile = "job.json";
+const jobRootDir = resolve(process.env.DOWNLOAD_JOB_DIR || join(tmpdir(), "video-downloader-jobs"));
 const concurrentFragmentDownloads = Math.max(
   1,
   Math.min(16, Number.parseInt(process.env.YTDLP_CONCURRENT_FRAGMENTS || "8", 10) || 8),
@@ -610,6 +612,56 @@ function activeJobCount() {
     ["queued", "downloading", "processing"].includes(job.status)).length;
 }
 
+function jobTempDir(id) {
+  return join(jobRootDir, id);
+}
+
+function serializeJobState(job) {
+  return {
+    id: job.id,
+    url: job.url,
+    format: job.format,
+    title: job.title,
+    status: job.status,
+    phase: job.phase,
+    progress: job.progress,
+    downloaded: job.downloaded,
+    total: job.total,
+    speed: job.speed,
+    eta: job.eta,
+    error: job.error,
+    output: job.output
+      ? {
+          file: job.output.file,
+          contentType: job.output.contentType || null,
+        }
+      : null,
+    cancelled: job.cancelled,
+  };
+}
+
+async function saveJobState(job) {
+  if (!job.tempDir) {
+    return;
+  }
+
+  await mkdir(job.tempDir, { recursive: true });
+  await writeFile(
+    join(job.tempDir, jobStateFile),
+    JSON.stringify(serializeJobState(job)),
+    "utf8",
+  );
+}
+
+function saveJobStateSoon(job) {
+  const now = Date.now();
+  if (now - (job.lastSavedAt || 0) < 1_000) {
+    return;
+  }
+  job.lastSavedAt = now;
+  void saveJobState(job).catch(() => {});
+}
+
 function serializeJob(job) {
   return {
     ok: true,
@@ -654,9 +706,85 @@ function scheduleJobRemoval(job, delay = jobRetentionMs) {
   job.cleanupTimer.unref?.();
 }
 
+async function restoreDownloadJob(id) {
+  const tempDir = jobTempDir(id);
+  let state;
+
+  try {
+    state = JSON.parse(await readFile(join(tempDir, jobStateFile), "utf8"));
+  } catch {
+    return null;
+  }
+
+  if (state?.id !== id) {
+    return null;
+  }
+
+  const job = {
+    id,
+    url: state.url,
+    format: state.format || "auto",
+    title: safeFileName(state.title || "video"),
+    status: state.status || "error",
+    phase: state.phase || "Download failed",
+    progress: Number.isFinite(state.progress) ? state.progress : 0,
+    downloaded: Number.isFinite(state.downloaded) ? state.downloaded : 0,
+    total: Number.isFinite(state.total) ? state.total : null,
+    speed: state.speed || null,
+    eta: state.eta || null,
+    error: state.error || null,
+    output: null,
+    tempDir,
+    child: null,
+    abortController: null,
+    cancelled: Boolean(state.cancelled),
+    cleanupTimer: null,
+    lastSavedAt: 0,
+  };
+
+  const outputFile = state.output?.file ? basename(String(state.output.file)) : null;
+  if (outputFile) {
+    const outputPath = join(tempDir, outputFile);
+    try {
+      const outputStats = await stat(outputPath);
+      if (outputStats.isFile()) {
+        job.output = {
+          file: outputFile,
+          path: outputPath,
+          stats: outputStats,
+          contentType: state.output.contentType || mimeTypes[extname(outputFile).toLowerCase()] || "application/octet-stream",
+        };
+      }
+    } catch {
+      job.output = null;
+    }
+  }
+
+  if (job.status === "ready" && !job.output) {
+    job.status = "error";
+    job.phase = "Download expired";
+    job.error = "The downloaded file is no longer available. Start the download again.";
+    job.progress = 0;
+    await saveJobState(job);
+  } else if (["queued", "downloading", "processing"].includes(job.status)) {
+    job.status = "error";
+    job.phase = "Download interrupted";
+    job.error = "The downloader restarted before this job finished. Start the download again. If this keeps happening on Render, keep the service on one instance.";
+    job.speed = null;
+    job.eta = null;
+    await saveJobState(job);
+  }
+
+  downloadJobs.set(id, job);
+  if (["ready", "error", "cancelled"].includes(job.status)) {
+    scheduleJobRemoval(job, job.status === "ready" ? 5 * 60_000 : 15 * 60_000);
+  }
+  return job;
+}
+
 async function findDownloadedFile(tempDir) {
   const files = (await readdir(tempDir))
-    .filter((file) => !file.endsWith(".part") && !file.endsWith(".ytdl"));
+    .filter((file) => file !== jobStateFile && !file.endsWith(".part") && !file.endsWith(".ytdl"));
   const candidates = await Promise.all(files.map(async (file) => {
     const path = join(tempDir, file);
     return { file, path, stats: await stat(path) };
@@ -702,6 +830,7 @@ async function runDirectDownloadJob(job) {
       job.eta = total && bytesPerSecond > 0
         ? `${Math.max(0, Math.ceil((total - job.downloaded) / bytesPerSecond))}s`
         : null;
+      saveJobStateSoon(job);
       callback(null, chunk);
     },
   });
@@ -746,12 +875,14 @@ function runExtractorDownloadJob(job, runner, args) {
         job.progress = progress.percent === null ? job.progress : Math.min(98, progress.percent);
         job.speed = progress.speed;
         job.eta = progress.eta;
+        saveJobStateSoon(job);
       } else if (/\[(?:Merger|VideoRemuxer|Fixup|Metadata)\]/i.test(line)) {
         job.status = "processing";
         job.phase = "Combining video and audio";
         job.progress = Math.max(job.progress || 0, 99);
         job.speed = null;
         job.eta = null;
+        saveJobStateSoon(job);
       }
     };
 
@@ -810,7 +941,8 @@ async function runDownloadJob(job) {
   try {
     job.status = "downloading";
     job.phase = "Starting download";
-    job.tempDir = await mkdtemp(join(tmpdir(), "video-downloader-job-"));
+    await mkdir(job.tempDir, { recursive: true });
+    await saveJobState(job);
 
     if (looksLikeDirectMediaUrl(job.url)) {
       await runDirectDownloadJob(job);
@@ -855,6 +987,7 @@ async function runDownloadJob(job) {
     job.total = job.output.stats.size;
     job.speed = null;
     job.eta = null;
+    await saveJobState(job);
     scheduleJobRemoval(job);
   } catch (error) {
     await removeJobFiles(job);
@@ -863,6 +996,8 @@ async function runDownloadJob(job) {
     job.error = job.cancelled ? null : readableExtractorError(error);
     job.speed = null;
     job.eta = null;
+    job.tempDir = jobTempDir(job.id);
+    await saveJobState(job);
     scheduleJobRemoval(job, 15 * 60_000);
   } finally {
     job.child = null;
@@ -902,23 +1037,30 @@ async function createDownloadJob(request, response) {
     abortController: null,
     cancelled: false,
     cleanupTimer: null,
+    lastSavedAt: 0,
   };
+  job.tempDir = jobTempDir(job.id);
 
+  await saveJobState(job);
   downloadJobs.set(job.id, job);
   sendJson(response, 202, serializeJob(job));
   setImmediate(() => void runDownloadJob(job));
 }
 
-function getDownloadJob(id) {
+async function getDownloadJob(id) {
   const job = downloadJobs.get(id);
   if (!job) {
-    throw httpError(404, "That download job no longer exists.");
+    const restoredJob = await restoreDownloadJob(id);
+    if (restoredJob) {
+      return restoredJob;
+    }
+    throw httpError(404, "That download job no longer exists. Start the download again. If this keeps happening on Render, keep the service on one instance.");
   }
   return job;
 }
 
 async function sendDownloadJobFile(id, response) {
-  const job = getDownloadJob(id);
+  const job = await getDownloadJob(id);
   if (job.status !== "ready" || !job.output) {
     throw httpError(409, "This download is not ready yet.");
   }
@@ -938,7 +1080,7 @@ async function sendDownloadJobFile(id, response) {
 }
 
 async function cancelDownloadJob(id, response) {
-  const job = getDownloadJob(id);
+  const job = await getDownloadJob(id);
   if (!["ready", "error", "cancelled"].includes(job.status)) {
     job.cancelled = true;
     job.child?.kill("SIGKILL");
@@ -948,6 +1090,8 @@ async function cancelDownloadJob(id, response) {
     job.speed = null;
     job.eta = null;
     await removeJobFiles(job);
+    job.tempDir = jobTempDir(job.id);
+    await saveJobState(job);
     scheduleJobRemoval(job, 5 * 60_000);
   }
   sendJson(response, 200, serializeJob(job));
@@ -1068,7 +1212,7 @@ export async function handleRequest(request, response) {
     }
 
     if (jobRoute && request.method === "GET") {
-      sendJson(response, 200, serializeJob(getDownloadJob(jobRoute[1])));
+      sendJson(response, 200, serializeJob(await getDownloadJob(jobRoute[1])));
       return;
     }
 

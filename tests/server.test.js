@@ -41,11 +41,11 @@ test("sanitizes filenames for content disposition", () => {
 
 test("builds ascii-safe content disposition headers", () => {
   assert.equal(
-    contentDispositionAttachment("party 🔥 video.mp4"),
+    contentDispositionAttachment("party \u{1F525} video.mp4"),
     "attachment; filename=\"party video.mp4\"; filename*=UTF-8''party%20%F0%9F%94%A5%20video.mp4",
   );
   assert.equal(
-    contentDispositionAttachment("🔥.mp4", "video.mp4"),
+    contentDispositionAttachment("\u{1F525}.mp4", "video.mp4"),
     "attachment; filename=\"video.mp4\"; filename*=UTF-8''%F0%9F%94%A5.mp4",
   );
 });
