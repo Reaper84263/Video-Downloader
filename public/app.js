@@ -55,6 +55,8 @@ function showMessage(message, tone = "error") {
   const title = document.createElement("h2");
   title.textContent = tone === "setup"
     ? "Extractor setup needed"
+    : tone === "auth"
+      ? "Cookies required"
     : tone === "server"
       ? "Downloader server issue"
       : "No download found";
@@ -348,7 +350,13 @@ form.addEventListener("submit", async (event) => {
       return;
     }
     if (!response.ok || !data.ok) {
-      showMessage(data.message || "This video could not be inspected.", response.status === 501 ? "setup" : "error");
+      const message = data.message || "This video could not be inspected.";
+      const tone = response.status === 501
+        ? "setup"
+        : /cookies|sign in|not a bot|authentication/i.test(message)
+          ? "auth"
+          : "error";
+      showMessage(message, tone);
       return;
     }
 

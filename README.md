@@ -29,6 +29,22 @@ Keep the service on **one instance**. Download progress and finished files are s
 
 `npm run setup` installs `yt-dlp` into the Render build for extractor-supported links. Direct `.mp4`, `.webm`, `.mov`, and `.m4v` links can work without it, but social/streaming pages need the setup step. You can set `YTDLP_CONCURRENT_FRAGMENTS` to tune download concurrency; the default is `8`. You can set `DOWNLOAD_JOB_DIR` if you want job files under a specific writable directory instead of the OS temp folder.
 
+Some sites, including YouTube, may reject Render datacenter traffic with a "sign in to confirm you're not a bot" message. For videos your account is allowed to access, export a Netscape-format cookies.txt file from your browser and configure one of these Render environment variables:
+
+```bash
+YTDLP_COOKIES_BASE64=<base64 encoded cookies.txt>
+YTDLP_COOKIES_FILE=/path/to/cookies.txt
+YTDLP_COOKIES=<raw cookies.txt text with \n line breaks>
+```
+
+On Windows, you can create the base64 value with:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))
+```
+
+Cookies are secrets. Do not commit `cookies.txt` to GitHub. DRM-protected, paywalled, private, and access-controlled videos are not supported.
+
 ## Optional extractor support
 
 Direct links such as `.mp4`, `.webm`, `.mov`, and `.m4v` work without extra tools. For public social or streaming URLs, install the project-local extractor and restart the server.

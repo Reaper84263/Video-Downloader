@@ -7,3 +7,5 @@ Thumbs.db
 .venv/
 *.part
 *.ytdl
+cookies.txt
+*.cookies.txt

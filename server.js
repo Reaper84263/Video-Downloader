@@ -52,6 +52,7 @@ const mimeTypes = {
 };
 
 let cachedYtDlp = undefined;
+let cachedYtDlpCookiesFile = undefined;
 const downloadJobs = new Map();
 
 const ytDlpCandidates = process.platform === "win32"
@@ -172,6 +173,10 @@ export function contentDispositionAttachment(value, fallback = "video") {
   const fileName = safeFileName(value, fallback);
   const fallbackName = asciiHeaderFileName(fileName, fallback);
   return `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeRfc5987Value(fileName)}`;
+}
+
+export function buildYtDlpCookieArgs(cookieFile) {
+  return cookieFile ? ["--cookies", cookieFile] : [];
 }
 
 export function pickBestFormats(info) {
@@ -519,10 +524,54 @@ async function resolveYtDlp() {
 async function runYtDlp(args, timeoutMs = ytdlpTimeoutMs) {
   const runner = await resolveYtDlp();
   if (!runner) {
-    throw httpError(501, "The video extractor is not installed. Run npm.cmd run setup, then restart the app.");
+    throw httpError(501, "The video extractor is not installed. Run npm run setup, then restart the app.");
   }
 
-  return runProcess(runner.command, [...runner.args, ...args], timeoutMs);
+  const cookieArgs = await getYtDlpCookieArgs();
+  return runProcess(runner.command, [...runner.args, ...cookieArgs, ...args], timeoutMs);
+}
+
+function decodeInlineCookies() {
+  if (process.env.YTDLP_COOKIES_BASE64) {
+    return Buffer.from(process.env.YTDLP_COOKIES_BASE64, "base64").toString("utf8");
+  }
+
+  if (process.env.YTDLP_COOKIES) {
+    return process.env.YTDLP_COOKIES
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n");
+  }
+
+  return null;
+}
+
+async function resolveYtDlpCookiesFile() {
+  if (cachedYtDlpCookiesFile !== undefined) {
+    return cachedYtDlpCookiesFile;
+  }
+
+  if (process.env.YTDLP_COOKIES_FILE) {
+    cachedYtDlpCookiesFile = process.env.YTDLP_COOKIES_FILE;
+    return cachedYtDlpCookiesFile;
+  }
+
+  const cookies = decodeInlineCookies();
+  if (!cookies?.trim()) {
+    cachedYtDlpCookiesFile = null;
+    return null;
+  }
+
+  await mkdir(jobRootDir, { recursive: true });
+  cachedYtDlpCookiesFile = join(jobRootDir, "yt-dlp-cookies.txt");
+  await writeFile(cachedYtDlpCookiesFile, cookies, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  return cachedYtDlpCookiesFile;
+}
+
+async function getYtDlpCookieArgs() {
+  return buildYtDlpCookieArgs(await resolveYtDlpCookiesFile());
 }
 
 async function inspectWithYtDlp(url) {
@@ -949,13 +998,15 @@ async function runDownloadJob(job) {
     } else {
       const runner = await resolveYtDlp();
       if (!runner) {
-        throw httpError(501, "The video extractor is not installed. Run npm.cmd run setup, then restart the app.");
+        throw httpError(501, "The video extractor is not installed. Run npm run setup, then restart the app.");
       }
 
       const selector = buildFormatSelector(job.format);
+      const cookieArgs = await getYtDlpCookieArgs();
       const outputTemplate = join(job.tempDir, "download.%(ext)s");
       const progressTemplate = "VDPROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s";
       await runExtractorDownloadJob(job, runner, [
+        ...cookieArgs,
         "-f",
         selector,
         "--no-playlist",
@@ -1105,11 +1156,12 @@ async function downloadWithYtDlp(requestUrl, response) {
 
   const runner = await resolveYtDlp();
   if (!runner) {
-    throw httpError(501, "The video extractor is not installed. Run npm.cmd run setup, then restart the app.");
+    throw httpError(501, "The video extractor is not installed. Run npm run setup, then restart the app.");
   }
 
   const selector = buildFormatSelector(formatKey);
   const siteArgs = getSiteExtractorArgs(parsed.href);
+  const cookieArgs = await getYtDlpCookieArgs();
   const tempDir = await mkdtemp(join(tmpdir(), "video-downloader-"));
   const outputTemplate = join(tempDir, "download.%(ext)s");
 
@@ -1118,6 +1170,7 @@ async function downloadWithYtDlp(requestUrl, response) {
       runner.command,
       [
         ...runner.args,
+        ...cookieArgs,
         "-f",
         selector,
         "--no-playlist",

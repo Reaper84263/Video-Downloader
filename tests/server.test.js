@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildFormatSelector,
+  buildYtDlpCookieArgs,
   contentDispositionAttachment,
   formatBytes,
   getSiteExtractorArgs,
@@ -70,6 +71,11 @@ test("builds a constrained yt-dlp selector for the chosen quality", () => {
   assert.match(buildFormatSelector("auto"), /bv\*/);
   assert.match(buildFormatSelector("quality-720"), /height<=720/);
   assert.throws(() => buildFormatSelector("quality-nope"), /Unsupported quality/);
+});
+
+test("builds yt-dlp cookie args only when configured", () => {
+  assert.deepEqual(buildYtDlpCookieArgs(null), []);
+  assert.deepEqual(buildYtDlpCookieArgs("/tmp/cookies.txt"), ["--cookies", "/tmp/cookies.txt"]);
 });
 
 test("uses browser impersonation only for hosts that require it", () => {
