@@ -14,12 +14,25 @@ Open `http://localhost:5173`.
 
 No npm install is required for the app itself.
 
+## Deploy on Render
+
+Create a **Web Service**, not a Static Site. The frontend calls the Node API routes in `server.js`, so a static deploy will load the page but downloads will fail because `/api/*` is not running.
+
+Use these Render settings:
+
+```bash
+Build Command: npm run setup
+Start Command: npm start
+```
+
+`npm run setup` installs `yt-dlp` into the Render build for extractor-supported links. Direct `.mp4`, `.webm`, `.mov`, and `.m4v` links can work without it, but social/streaming pages need the setup step. You can set `YTDLP_CONCURRENT_FRAGMENTS` to tune download concurrency; the default is `8`.
+
 ## Optional extractor support
 
 Direct links such as `.mp4`, `.webm`, `.mov`, and `.m4v` work without extra tools. For public social or streaming URLs, install the project-local extractor and restart the server.
 
 ```bash
-npm.cmd run setup
+npm run setup
 ```
 
 The server also detects `yt-dlp` installed globally, in a local `.venv`, or as a Python module. The setup command includes yt-dlp's browser-impersonation support for hosts that reject basic HTTP clients.
@@ -31,6 +44,6 @@ The app does not bypass logins, DRM, private videos, or copyright restrictions. 
 ## Scripts
 
 ```bash
-npm.cmd test
-npm.cmd start
+npm test
+npm start
 ```

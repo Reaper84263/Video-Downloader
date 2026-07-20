@@ -2,10 +2,11 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { createReadStream } from "node:fs";
-import { access, mkdtemp, open, readdir, rm, stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { access, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, relative, resolve } from "node:path";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import net from "node:net";
@@ -18,6 +19,10 @@ const ytdlpTimeoutMs = 45_000;
 const downloadTimeoutMs = 30 * 60_000;
 const jobRetentionMs = 60 * 60_000;
 const maxActiveJobs = 3;
+const concurrentFragmentDownloads = Math.max(
+  1,
+  Math.min(16, Number.parseInt(process.env.YTDLP_CONCURRENT_FRAGMENTS || "8", 10) || 8),
+);
 const directMediaExtensions = new Set([
   ".mp4",
   ".webm",
@@ -119,12 +124,52 @@ export function formatBytes(bytes) {
 
 export function safeFileName(value, fallback = "video") {
   const cleaned = String(value || fallback)
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, " ")
+    .replace(/[<>:"/\\|?*\u0000-\u001F\u007F]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
 
   return cleaned || fallback;
+}
+
+function encodeRfc5987Value(value) {
+  return encodeURIComponent(value)
+    .replace(/['()*]/g, (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function asciiHeaderFileName(value, fallback) {
+  const fileName = safeFileName(value, fallback);
+  const extension = extname(fileName);
+  const ascii = fileName
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+
+  if (ascii && !ascii.startsWith(".")) {
+    return ascii;
+  }
+
+  const fallbackName = safeFileName(fallback, "video")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120)
+    .replace(/^\.+/, "") || "video";
+  return extension && extname(fallbackName).toLowerCase() !== extension.toLowerCase()
+    ? `${fallbackName}${extension}`
+    : fallbackName;
+}
+
+export function contentDispositionAttachment(value, fallback = "video") {
+  const fileName = safeFileName(value, fallback);
+  const fallbackName = asciiHeaderFileName(fileName, fallback);
+  return `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeRfc5987Value(fileName)}`;
 }
 
 export function pickBestFormats(info) {
@@ -553,19 +598,11 @@ async function proxyDirectMedia(requestUrl, response) {
   response.writeHead(200, {
     "content-type": contentType,
     ...(contentLength ? { "content-length": contentLength } : {}),
-    "content-disposition": `attachment; filename="${filename}"`,
+    "content-disposition": contentDispositionAttachment(filename),
     "cache-control": "no-store",
   });
 
-  const reader = upstream.body.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    response.write(Buffer.from(value));
-  }
-  response.end();
+  await pipeline(Readable.fromWeb(upstream.body), response);
 }
 
 function activeJobCount() {
@@ -646,24 +683,17 @@ async function runDirectDownloadJob(job) {
   const outputPath = join(job.tempDir, `download${extension}`);
   const total = Number(upstream.headers.get("content-length")) || null;
   const startedAt = Date.now();
-  const file = await open(outputPath, "w");
-  const reader = upstream.body.getReader();
 
   job.total = total;
   job.phase = "Downloading video";
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
+  const progressStream = new Transform({
+    transform(chunk, _encoding, callback) {
       if (job.cancelled) {
-        throw httpError(499, "Download cancelled.");
+        callback(httpError(499, "Download cancelled."));
+        return;
       }
 
-      const chunk = Buffer.from(value);
-      await file.write(chunk);
       job.downloaded += chunk.length;
       const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.1);
       const bytesPerSecond = job.downloaded / elapsedSeconds;
@@ -672,9 +702,17 @@ async function runDirectDownloadJob(job) {
       job.eta = total && bytesPerSecond > 0
         ? `${Math.max(0, Math.ceil((total - job.downloaded) / bytesPerSecond))}s`
         : null;
-    }
+      callback(null, chunk);
+    },
+  });
+
+  try {
+    await pipeline(
+      Readable.fromWeb(upstream.body),
+      progressStream,
+      createWriteStream(outputPath, { highWaterMark: 1024 * 1024 }),
+    );
   } finally {
-    await file.close();
     job.abortController = null;
   }
 
@@ -791,6 +829,8 @@ async function runDownloadJob(job) {
         "--no-playlist",
         "--no-warnings",
         "--newline",
+        "--concurrent-fragments",
+        String(concurrentFragmentDownloads),
         "--progress-template",
         `download:${progressTemplate}`,
         "--ignore-config",
@@ -890,7 +930,7 @@ async function sendDownloadJobFile(id, response) {
   response.writeHead(200, {
     "content-type": job.output.contentType || mimeTypes[extension] || "application/octet-stream",
     "content-length": job.output.stats.size,
-    "content-disposition": `attachment; filename="${filename}"`,
+    "content-disposition": contentDispositionAttachment(filename, `video${extension}`),
     "cache-control": "no-store",
   });
   scheduleJobRemoval(job, 5 * 60_000);
@@ -939,6 +979,8 @@ async function downloadWithYtDlp(requestUrl, response) {
         "--no-playlist",
         "--no-warnings",
         "--no-progress",
+        "--concurrent-fragments",
+        String(concurrentFragmentDownloads),
         "--ignore-config",
         ...siteArgs,
         "--merge-output-format",
@@ -973,7 +1015,7 @@ async function downloadWithYtDlp(requestUrl, response) {
     response.writeHead(200, {
       "content-type": mimeTypes[extension] || "application/octet-stream",
       "content-length": output.stats.size,
-      "content-disposition": `attachment; filename="${title}${extension}"`,
+      "content-disposition": contentDispositionAttachment(`${title}${extension}`, `video${extension}`),
       "cache-control": "no-store",
     });
     await pipeline(createReadStream(output.path), response);

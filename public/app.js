@@ -53,7 +53,11 @@ function showMessage(message, tone = "error") {
   messageState.innerHTML = "";
 
   const title = document.createElement("h2");
-  title.textContent = tone === "setup" ? "Extractor setup needed" : "No download found";
+  title.textContent = tone === "setup"
+    ? "Extractor setup needed"
+    : tone === "server"
+      ? "Downloader server issue"
+      : "No download found";
 
   const body = document.createElement("p");
   body.textContent = message;
@@ -63,7 +67,7 @@ function showMessage(message, tone = "error") {
   if (tone === "setup") {
     const command = document.createElement("code");
     command.className = "setup-command";
-    command.textContent = "npm.cmd run setup";
+    command.textContent = "npm run setup";
     messageState.append(command);
   }
   setPanel("message");
@@ -75,11 +79,11 @@ async function checkHealth() {
     const data = await response.json();
     extractorStatus.classList.toggle("ready", Boolean(data.ytdlp));
     extractorStatus.classList.toggle("limited", !data.ytdlp);
-    extractorStatus.title = data.ytdlp && data.version ? `yt-dlp ${data.version}` : "Run npm.cmd run setup, then restart the app";
+    extractorStatus.title = data.ytdlp && data.version ? `yt-dlp ${data.version}` : "Run npm run setup, then restart the app";
     extractorStatus.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${data.ytdlp ? "All links ready" : "Setup required"}`;
   } catch {
     extractorStatus.classList.add("limited");
-    extractorStatus.innerHTML = '<span class="status-dot" aria-hidden="true"></span>Local server offline';
+    extractorStatus.innerHTML = '<span class="status-dot" aria-hidden="true"></span>Downloader API offline';
   }
 }
 
@@ -333,7 +337,16 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({ url }),
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      showMessage(
+        `The downloader API returned ${response.status || "an unreadable response"}. On Render, deploy this as a Web Service with npm start.`,
+        "server",
+      );
+      return;
+    }
     if (!response.ok || !data.ok) {
       showMessage(data.message || "This video could not be inspected.", response.status === 501 ? "setup" : "error");
       return;
@@ -341,7 +354,7 @@ form.addEventListener("submit", async (event) => {
 
     renderResult(data);
   } catch {
-    showMessage("The local downloader server did not respond.", "error");
+    showMessage("The downloader server did not respond. On Render, check that the Web Service is running npm start.", "server");
   }
 });
 

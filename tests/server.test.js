@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildFormatSelector,
+  contentDispositionAttachment,
   formatBytes,
   getSiteExtractorArgs,
   isPrivateIp,
@@ -36,6 +37,17 @@ test("formats byte sizes", () => {
 test("sanitizes filenames for content disposition", () => {
   assert.equal(safeFileName('bad:file/name?.mp4'), "bad file name .mp4");
   assert.equal(safeFileName(""), "video");
+});
+
+test("builds ascii-safe content disposition headers", () => {
+  assert.equal(
+    contentDispositionAttachment("party 🔥 video.mp4"),
+    "attachment; filename=\"party video.mp4\"; filename*=UTF-8''party%20%F0%9F%94%A5%20video.mp4",
+  );
+  assert.equal(
+    contentDispositionAttachment("🔥.mp4", "video.mp4"),
+    "attachment; filename=\"video.mp4\"; filename*=UTF-8''%F0%9F%94%A5.mp4",
+  );
 });
 
 test("offers every detected video quality including video-only formats", () => {
