@@ -179,6 +179,21 @@ export function buildYtDlpCookieArgs(cookieFile) {
   return cookieFile ? ["--cookies", cookieFile] : [];
 }
 
+export function readableDownloadError(message, fallback = "The download failed.") {
+  const text = String(message || fallback)
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .at(-1)
+    ?.replace(/^ERROR:\s*/i, "")
+    .trim() || fallback;
+
+  if (/Cloudflare|anti-bot|bot challenge|HTTP Error 403/i.test(text)) {
+    return "This site blocked the downloader with Cloudflare or another anti-bot protection. Use an official download option, a direct public media file URL, or a source you are allowed to access without a bot challenge.";
+  }
+
+  return text;
+}
+
 export function pickBestFormats(info) {
   const rows = Array.isArray(info?.formats) ? info.formats : [];
   const heights = rows
@@ -486,7 +501,7 @@ function runProcess(command, args, timeoutMs) {
         resolveProcess({ stdout, stderr });
         return;
       }
-      rejectProcess(httpError(422, stderr.trim() || "This URL could not be inspected."));
+      rejectProcess(httpError(422, readableDownloadError(stderr, "This URL could not be inspected.")));
     });
   });
 }
@@ -728,13 +743,7 @@ function serializeJob(job) {
 }
 
 function readableExtractorError(error) {
-  const message = String(error?.message || "The download failed.")
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .at(-1)
-    ?.replace(/^ERROR:\s*/i, "")
-    .trim();
-  return message || "The download failed.";
+  return readableDownloadError(error?.message, "The download failed.");
 }
 
 async function removeJobFiles(job) {
@@ -980,7 +989,7 @@ function runExtractorDownloadJob(job, runner, args) {
       } else if (code === 0) {
         resolveJob();
       } else {
-        rejectJob(httpError(422, stderr.trim() || "This video could not be downloaded."));
+        rejectJob(httpError(422, readableDownloadError(stderr, "This video could not be downloaded.")));
       }
     });
   });

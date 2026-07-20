@@ -45,6 +45,8 @@ On Windows, you can create the base64 value with:
 
 Cookies are secrets. Do not commit `cookies.txt` to GitHub. DRM-protected, paywalled, private, and access-controlled videos are not supported.
 
+If `yt-dlp` reports a Cloudflare anti-bot challenge or asks for `generic:impersonate`, the site is blocking automated server traffic. This app does not bypass anti-bot challenges. Use an official download/export option, a direct public media file URL, or another source you are allowed to access without that protection.
+
 ## Optional extractor support
 
 Direct links such as `.mp4`, `.webm`, `.mov`, and `.m4v` work without extra tools. For public social or streaming URLs, install the project-local extractor and restart the server.

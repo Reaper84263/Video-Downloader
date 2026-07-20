@@ -10,6 +10,7 @@ import {
   looksLikeDirectMediaUrl,
   parseYtDlpProgress,
   pickBestFormats,
+  readableDownloadError,
   safeFileName,
 } from "../server.js";
 
@@ -76,6 +77,13 @@ test("builds a constrained yt-dlp selector for the chosen quality", () => {
 test("builds yt-dlp cookie args only when configured", () => {
   assert.deepEqual(buildYtDlpCookieArgs(null), []);
   assert.deepEqual(buildYtDlpCookieArgs("/tmp/cookies.txt"), ["--cookies", "/tmp/cookies.txt"]);
+});
+
+test("explains Cloudflare anti-bot extractor blocks", () => {
+  assert.match(
+    readableDownloadError('ERROR: [generic] Got HTTP Error 403 caused by Cloudflare anti-bot challenge; try again with --extractor-args "generic:impersonate"'),
+    /blocked the downloader/,
+  );
 });
 
 test("uses browser impersonation only for hosts that require it", () => {

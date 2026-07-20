@@ -48,18 +48,28 @@ function setPanel(state) {
   videoResult.classList.toggle("hidden", state !== "result");
 }
 
+function messageTitleForTone(tone) {
+  if (tone === "setup") {
+    return "Extractor setup needed";
+  }
+  if (tone === "auth") {
+    return "Cookies required";
+  }
+  if (tone === "blocked") {
+    return "Site protection blocked this";
+  }
+  if (tone === "server") {
+    return "Downloader server issue";
+  }
+  return "No download found";
+}
+
 function showMessage(message, tone = "error") {
   messageState.className = `message-state ${tone}`;
   messageState.innerHTML = "";
 
   const title = document.createElement("h2");
-  title.textContent = tone === "setup"
-    ? "Extractor setup needed"
-    : tone === "auth"
-      ? "Cookies required"
-    : tone === "server"
-      ? "Downloader server issue"
-      : "No download found";
+  title.textContent = messageTitleForTone(tone);
 
   const body = document.createElement("p");
   body.textContent = message;
@@ -355,6 +365,8 @@ form.addEventListener("submit", async (event) => {
         ? "setup"
         : /cookies|sign in|not a bot|authentication/i.test(message)
           ? "auth"
+          : /cloudflare|anti-bot|bot challenge|site blocked|protection|HTTP Error 403/i.test(message)
+            ? "blocked"
           : "error";
       showMessage(message, tone);
       return;
