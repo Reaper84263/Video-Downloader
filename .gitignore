@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+downloads/
+.DS_Store
+Thumbs.db
+.venv/
+*.part
+*.ytdl

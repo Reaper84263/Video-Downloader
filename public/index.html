@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video Downloader</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar" aria-label="Application header">
+        <a class="brand" href="/" aria-label="Video Downloader home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M4 6.6C4 5.2 5.2 4 6.6 4h10.8C18.8 4 20 5.2 20 6.6v10.8c0 1.4-1.2 2.6-2.6 2.6H6.6C5.2 20 4 18.8 4 17.4V6.6Z" />
+              <path d="m10 8.3 5.2 3.2c.4.2.4.8 0 1L10 15.7c-.4.2-.9 0-.9-.5V8.8c0-.5.5-.8.9-.5Z" />
+            </svg>
+          </span>
+          <span>Video Downloader</span>
+        </a>
+        <div class="status-pill" id="extractorStatus">
+          <span class="status-dot" aria-hidden="true"></span>
+          Checking extractor
+        </div>
+      </header>
+
+      <section class="workspace" aria-labelledby="pageTitle">
+        <div class="tool-panel">
+          <div class="title-block">
+            <p class="eyebrow">Fast public video saver</p>
+            <h1 id="pageTitle">Paste a video link and download the available file.</h1>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Video source presets">
+            <button class="tab-button active" type="button" data-platform="any" role="tab" aria-selected="true">
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 7h16M7 4v16M17 4v16M4 17h16" /></svg>
+              </span>
+              Any video
+            </button>
+            <button class="tab-button" type="button" data-platform="facebook" role="tab" aria-selected="false">
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 8h3V4h-3c-2.8 0-5 2.2-5 5v2H6v4h3v5h4v-5h3l1-4h-4V9c0-.6.4-1 1-1Z" /></svg>
+              </span>
+              Facebook
+            </button>
+            <button class="tab-button" type="button" data-platform="instagram" role="tab" aria-selected="false">
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="4" /><circle cx="12" cy="12" r="3" /><path d="M16.5 7.6h.1" /></svg>
+              </span>
+              Instagram
+            </button>
+            <button class="tab-button" type="button" data-platform="tiktok" role="tab" aria-selected="false">
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 4v9.2a4 4 0 1 1-4-4h.7v3.1H10a.9.9 0 1 0 .9.9V4h3.1c.4 2.4 2 4.1 4 4.6V12c-1.5-.1-2.9-.7-4-1.6Z" /></svg>
+              </span>
+              TikTok
+            </button>
+          </div>
+
+          <form class="download-form" id="downloadForm">
+            <label for="videoUrl">Enter video URL</label>
+            <div class="input-row">
+              <input
+                id="videoUrl"
+                name="videoUrl"
+                type="text"
+                inputmode="url"
+                autocomplete="url"
+                placeholder="https://example.com/video.mp4"
+                required
+              />
+              <button class="icon-button" id="pasteButton" type="button" title="Paste from clipboard" aria-label="Paste from clipboard">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 5h6M9 4.5A2.5 2.5 0 0 1 11.5 2h1A2.5 2.5 0 0 1 15 4.5V6H9V4.5Z" />
+                  <path d="M8 5H6.5A2.5 2.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-11A2.5 2.5 0 0 0 17.5 5H16" />
+                </svg>
+              </button>
+            </div>
+            <button class="primary-button" type="submit">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v11m0 0 4-4m-4 4-4-4" />
+                <path d="M5 17v1.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V17" />
+              </svg>
+              Download video
+            </button>
+          </form>
+
+          <div class="trust-strip" aria-label="Downloader limits">
+            <span>MP4</span>
+            <span>WEBM</span>
+            <span>MOV</span>
+            <span>Public URLs</span>
+          </div>
+        </div>
+
+        <aside class="result-panel" aria-live="polite">
+          <div class="empty-state" id="emptyState">
+            <img src="/video-console.svg" alt="" />
+            <div>
+              <h2>Ready for a link</h2>
+              <p>Paste a public video page or direct file link. The status above will tell you when the extractor is ready.</p>
+            </div>
+          </div>
+
+          <div class="loading-state hidden" id="loadingState">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Checking available video files...</p>
+          </div>
+
+          <div class="message-state hidden" id="messageState"></div>
+
+          <div class="video-result hidden" id="videoResult">
+            <div class="preview-frame">
+              <img id="thumbnail" src="/video-console.svg" alt="" />
+            </div>
+            <div class="result-heading">
+              <div>
+                <p id="sourceName" class="result-source"></p>
+                <h2 id="videoTitle"></h2>
+              </div>
+              <span id="modeBadge" class="mode-badge"></span>
+            </div>
+            <div class="format-list" id="formatList" aria-label="Available downloads"></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="info-band" aria-label="Responsible use">
+        <div>
+          <h2>Built for public, permitted downloads</h2>
+          <p>Use it for content you own, public-domain media, Creative Commons clips, or files you have permission to save. Private, DRM-protected, login-only, and copyrighted commercial use cases are intentionally out of scope.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

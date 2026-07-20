@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" role="img" aria-label="">
+  <defs>
+    <linearGradient id="screen" x1="80" x2="560" y1="70" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b5d56"/>
+      <stop offset=".55" stop-color="#122421"/>
+      <stop offset="1" stop-color="#e95545"/>
+    </linearGradient>
+    <linearGradient id="clip" x1="120" x2="512" y1="110" y2="302" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d9f2e9"/>
+      <stop offset="1" stop-color="#f4c84a"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="420" rx="0" fill="#f7faf7"/>
+  <path d="M106 76h428c22 0 40 18 40 40v218c0 22-18 40-40 40H106c-22 0-40-18-40-40V116c0-22 18-40 40-40Z" fill="#16201e"/>
+  <path d="M106 76h428c22 0 40 18 40 40v218c0 22-18 40-40 40H106c-22 0-40-18-40-40V116c0-22 18-40 40-40Z" fill="url(#screen)" opacity=".92"/>
+  <rect x="102" y="112" width="436" height="214" rx="8" fill="#fff" opacity=".15"/>
+  <rect x="126" y="136" width="254" height="146" rx="8" fill="url(#clip)"/>
+  <path d="m229 176 78 45-78 45z" fill="#16201e" opacity=".82"/>
+  <rect x="406" y="138" width="104" height="20" rx="4" fill="#fff" opacity=".78"/>
+  <rect x="406" y="174" width="78" height="16" rx="4" fill="#fff" opacity=".45"/>
+  <rect x="406" y="204" width="104" height="16" rx="4" fill="#fff" opacity=".45"/>
+  <rect x="406" y="234" width="58" height="16" rx="4" fill="#fff" opacity=".45"/>
+  <rect x="126" y="304" width="384" height="8" rx="4" fill="#fff" opacity=".35"/>
+  <rect x="126" y="304" width="196" height="8" rx="4" fill="#f4c84a"/>
+  <circle cx="340" cy="308" r="12" fill="#f4c84a"/>
+  <path d="M178 374h284l34 28H144z" fill="#16201e" opacity=".9"/>
+  <path d="M146 54h72M422 44h72M498 54h26" stroke="#087f73" stroke-width="12" stroke-linecap="round"/>
+  <path d="M86 36h34M524 386h56M56 386h28" stroke="#e95545" stroke-width="12" stroke-linecap="round"/>
+</svg>

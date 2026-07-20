@@ -1,0 +1,16 @@
+{
+  "name": "video-downloader",
+  "version": "1.0.0",
+  "description": "A local video downloader web app for direct media links and public URLs supported by yt-dlp.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "setup": "node scripts/setup-extractor.js",
+    "test": "node tests/server.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
