@@ -8,6 +8,7 @@ import {
   formatBytes,
   getSiteExtractorArgs,
   isPrivateIp,
+  isYouTubeUrl,
   looksLikeDirectMediaUrl,
   parseYtDlpProgress,
   pickBestFormats,
@@ -20,6 +21,14 @@ test("detects direct video file URLs", () => {
   assert.equal(looksLikeDirectMediaUrl("https://cdn.example.com/watch/video.webm?token=1"), true);
   assert.equal(looksLikeDirectMediaUrl("https://example.com/watch/12345"), false);
   assert.equal(looksLikeDirectMediaUrl("not a url"), false);
+});
+
+test("detects YouTube watch URLs", () => {
+  assert.equal(isYouTubeUrl("https://www.youtube.com/watch?v=abc123"), true);
+  assert.equal(isYouTubeUrl("https://youtube.com/shorts/abc123"), true);
+  assert.equal(isYouTubeUrl("https://youtu.be/abc123"), true);
+  assert.equal(isYouTubeUrl("https://youtube.com.example.com/watch?v=abc123"), false);
+  assert.equal(isYouTubeUrl("not a url"), false);
 });
 
 test("blocks private network addresses", () => {

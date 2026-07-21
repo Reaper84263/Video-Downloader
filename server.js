@@ -77,6 +77,38 @@ export function looksLikeDirectMediaUrl(rawUrl) {
   }
 }
 
+export function isYouTubeUrl(rawUrl) {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, "");
+    return (
+      hostname === "youtube.com" ||
+      hostname.endsWith(".youtube.com") ||
+      hostname === "youtu.be" ||
+      hostname === "youtube-nocookie.com" ||
+      hostname.endsWith(".youtube-nocookie.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function readBooleanEnv(name) {
+  const value = process.env[name];
+  if (value === undefined) {
+    return null;
+  }
+  return /^(1|true|yes|on)$/i.test(value);
+}
+
+function shouldRequireYouTubeCookies() {
+  const configured = readBooleanEnv("YTDLP_REQUIRE_YOUTUBE_COOKIES");
+  if (configured !== null) {
+    return configured;
+  }
+
+  return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL);
+}
+
 export function isPrivateIp(address) {
   const version = net.isIP(address);
   if (!version) {
@@ -605,6 +637,20 @@ async function resolveYtDlpCookiesFile() {
   return cachedYtDlpCookiesFile;
 }
 
+async function hasYtDlpCookiesConfigured() {
+  const cookiesFile = await resolveYtDlpCookiesFile();
+  if (!cookiesFile) {
+    return false;
+  }
+
+  try {
+    await access(cookiesFile);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function getYtDlpCookieArgs() {
   return buildYtDlpCookieArgs(await resolveYtDlpCookiesFile());
 }
@@ -659,6 +705,10 @@ async function inspectUrl(request, response) {
   if (looksLikeDirectMediaUrl(parsed.href)) {
     sendJson(response, 200, await inspectDirectMedia(parsed.href));
     return;
+  }
+
+  if (isYouTubeUrl(parsed.href) && shouldRequireYouTubeCookies() && !(await hasYtDlpCookiesConfigured())) {
+    throw httpError(428, "YouTube downloads on Render need browser cookies. Export a cookies.txt file from an account that can watch the video, set YTDLP_COOKIES_BASE64 in Render, then redeploy.");
   }
 
   sendJson(response, 200, await inspectWithYtDlp(parsed.href));
@@ -1316,10 +1366,15 @@ export async function handleRequest(request, response) {
 
     if (request.method === "GET" && requestUrl.pathname === "/api/health") {
       const ytDlp = await resolveYtDlp();
+      const youtubeCookies = await hasYtDlpCookiesConfigured();
       sendJson(response, 200, {
         ok: true,
         ytdlp: Boolean(ytDlp),
         version: ytDlp?.version || null,
+        youtube: {
+          cookies: youtubeCookies,
+          cookiesRequired: shouldRequireYouTubeCookies(),
+        },
       });
       return;
     }

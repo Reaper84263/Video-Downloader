@@ -89,10 +89,26 @@ async function checkHealth() {
   try {
     const response = await fetch("/api/health");
     const data = await response.json();
-    extractorStatus.classList.toggle("ready", Boolean(data.ytdlp));
-    extractorStatus.classList.toggle("limited", !data.ytdlp);
-    extractorStatus.title = data.ytdlp && data.version ? `yt-dlp ${data.version}` : "Run npm run setup, then restart the app";
-    extractorStatus.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${data.ytdlp ? "All links ready" : "Setup required"}`;
+    const extractorReady = Boolean(data.ytdlp);
+    const youtubeCookiesNeeded = Boolean(data.youtube?.cookiesRequired && !data.youtube?.cookies);
+    const fullyReady = extractorReady && !youtubeCookiesNeeded;
+    extractorStatus.classList.toggle("ready", fullyReady);
+    extractorStatus.classList.toggle("limited", !fullyReady);
+    extractorStatus.title = !extractorReady
+      ? "Run npm run setup, then restart the app"
+      : youtubeCookiesNeeded
+        ? "Set YTDLP_COOKIES_BASE64 in Render, then redeploy"
+        : data.youtube?.cookies
+          ? `yt-dlp ${data.version}; YouTube cookies configured`
+          : `yt-dlp ${data.version}`;
+    const statusLabel = !extractorReady
+      ? "Setup required"
+      : youtubeCookiesNeeded
+        ? "YouTube cookies needed"
+        : data.youtube?.cookies
+          ? "YouTube ready"
+          : "Extractor ready";
+    extractorStatus.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${statusLabel}`;
   } catch {
     extractorStatus.classList.add("limited");
     extractorStatus.innerHTML = '<span class="status-dot" aria-hidden="true"></span>Downloader API offline';

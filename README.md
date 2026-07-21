@@ -45,6 +45,8 @@ On Windows, you can create the base64 value with:
 
 Cookies are secrets. Do not commit `cookies.txt` to GitHub. DRM-protected, paywalled, private, and access-controlled videos are not supported.
 
+On Render, YouTube links are held until cookies are configured, and the app status pill will show "YouTube cookies needed" or "YouTube ready." Set `YTDLP_REQUIRE_YOUTUBE_COOKIES=false` only for a deployment where YouTube works without cookies.
+
 After adding or changing cookie environment variables on Render, redeploy or restart the service. If the browser still shows old wording such as "No download found" for a cookie error, hard-refresh the page once; core app assets are served with `no-store` so future deploys should update immediately.
 
 If `yt-dlp` reports a Cloudflare anti-bot challenge or asks for `generic:impersonate`, the site is blocking automated server traffic. This app does not bypass anti-bot challenges. Use an official download/export option, a direct public media file URL, or another source you are allowed to access without that protection.
