@@ -187,11 +187,31 @@ export function readableDownloadError(message, fallback = "The download failed."
     ?.replace(/^ERROR:\s*/i, "")
     .trim() || fallback;
 
+  if (/sign in to confirm.*not a bot|not a bot|cookies-from-browser|--cookies\b|authentication/i.test(text)) {
+    return "Cookies required: this site needs browser cookies before the downloader can access that video from Render. Export a cookies.txt file from a browser account that can watch the video, set YTDLP_COOKIES_BASE64 in Render, then redeploy.";
+  }
+
   if (/Cloudflare|anti-bot|bot challenge|HTTP Error 403/i.test(text)) {
     return "This site blocked the downloader with Cloudflare or another anti-bot protection. Use an official download option, a direct public media file URL, or a source you are allowed to access without a bot challenge.";
   }
 
   return text;
+}
+
+export function downloadErrorTone(message, status = 500) {
+  if (status === 501) {
+    return "setup";
+  }
+
+  if (/cookies|required|sign in|not a bot|authentication/i.test(String(message || ""))) {
+    return "auth";
+  }
+
+  if (/cloudflare|anti-bot|bot challenge|site blocked|protection|HTTP Error 403/i.test(String(message || ""))) {
+    return "blocked";
+  }
+
+  return "error";
 }
 
 export function pickBestFormats(info) {
@@ -1245,10 +1265,11 @@ async function serveStatic(requestUrl, response) {
     throw httpError(404, "Not found.");
   }
 
+  const noStoreAsset = ["/index.html", "/app.js", "/styles.css"].includes(requestedPath);
   response.writeHead(200, {
     "content-type": mimeTypes[extname(filePath).toLowerCase()] || "application/octet-stream",
     "content-length": fileStats.size,
-    "cache-control": requestedPath === "/index.html" ? "no-store" : "public, max-age=3600",
+    "cache-control": noStoreAsset ? "no-store" : "public, max-age=3600",
   });
   createReadStream(filePath).pipe(response);
 }
@@ -1318,6 +1339,7 @@ export async function handleRequest(request, response) {
     sendJson(response, status, {
       ok: false,
       message: error.message || "Something went wrong.",
+      tone: downloadErrorTone(error.message, status),
     });
   }
 }

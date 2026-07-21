@@ -4,6 +4,7 @@ import {
   buildFormatSelector,
   buildYtDlpCookieArgs,
   contentDispositionAttachment,
+  downloadErrorTone,
   formatBytes,
   getSiteExtractorArgs,
   isPrivateIp,
@@ -84,6 +85,12 @@ test("explains Cloudflare anti-bot extractor blocks", () => {
     readableDownloadError('ERROR: [generic] Got HTTP Error 403 caused by Cloudflare anti-bot challenge; try again with --extractor-args "generic:impersonate"'),
     /blocked the downloader/,
   );
+});
+
+test("explains YouTube bot checks as cookie-required errors", () => {
+  const message = readableDownloadError("[youtube] suRsxpoAc5w: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.");
+  assert.match(message, /Cookies required/);
+  assert.equal(downloadErrorTone(message, 422), "auth");
 });
 
 test("uses browser impersonation only for hosts that require it", () => {

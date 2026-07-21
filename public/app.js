@@ -361,13 +361,13 @@ form.addEventListener("submit", async (event) => {
     }
     if (!response.ok || !data.ok) {
       const message = data.message || "This video could not be inspected.";
-      const tone = response.status === 501
+      const tone = data.tone || (response.status === 501
         ? "setup"
         : /cookies|sign in|not a bot|authentication/i.test(message)
           ? "auth"
           : /cloudflare|anti-bot|bot challenge|site blocked|protection|HTTP Error 403/i.test(message)
             ? "blocked"
-          : "error";
+          : "error");
       showMessage(message, tone);
       return;
     }
